@@ -14,12 +14,17 @@ from rasterio.crs import CRS
 from rasterio.vrt import WarpedVRT
 
 from torch.utils.data import DataLoader
-from torchgeo.datasets import GeoDataset, RasterDataset, stack_samples
-from torchgeo.samplers import RandomGeoSampler
 
-from train_utils import set_seed
+from .train_utils import set_seed
 import numpy as np
 import random
+import warnings
+
+try:
+    from torchgeo.datasets import GeoDataset, RasterDataset, stack_samples
+    from torchgeo.samplers import RandomGeoSampler
+except Exception:
+    warnings.warn("torchgeo is not installed, dataloder is disabled")
 
 set_seed(0)
 

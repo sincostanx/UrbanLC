@@ -1,6 +1,4 @@
 
-from copy import copy
-
 ######################################
 # Landsat constants
 ######################################
@@ -51,30 +49,6 @@ JAXA2111_LABEL = {
     11: (None, "Bamboo"),  # Bamboo forest
     12: (None, "Solar"),  # Solar panel
 }
-JAXA2111_CLASSES = sorted(JAXA2111_LABEL.keys())
-
-######################################
-# JAXA v18.03 class
-######################################
-JAXA1803_LABEL = {
-    1: (None, "Tree"),  # Water bodies
-    2: (None, "Built-up"),  # Built-up
-    3: (None, "Paddy"),  # Paddy field
-    4: (None, "Cropland"),  # Cropland
-    5: (None, "Grassland"),  # Grassland
-    6: (None, "DBF"),  # DBF (deciduous broad-leaf forest)
-    7: (None, "DNF"),  # DNF (deciduous needle-leaf forest)
-    8: (None, "EBF"),  # EBF (evergreen broad-leaf forest)
-    9: (None, "ENF"),  # ENF (evergreen needle-leaf forest)
-    10: (None, "Bare"),  # Bare
-}
-JAXA1803_CLASSES = sorted(JAXA1803_LABEL.keys())
-
-######################################
-# JAXA v16.09 class
-######################################
-JAXA1609_LABEL = copy(JAXA1803_LABEL)
-JAXA1609_CLASSES = copy(JAXA1803_CLASSES)
 
 ######################################
 # Evaluation constants
@@ -163,23 +137,6 @@ JAXA21_map = {
     11: 0,      #11: Bamboo forest
     12: 1,      #12: Solar panel
 }
-
-# Map label in JAXA 18.03 dataset to super class for evaluation
-JAXA18_map = {
-    1: 2,       #1: Water bodies
-    2: 1,       #2: Built-up
-    3: 0,       #3: Paddy field
-    4: 0,       #4: Cropland
-    5: 0,       #5: Grassland
-    6: 0,       #6: DBF (deciduous broad-leaf forest)
-    7: 0,       #7: DNF (deciduous needle-leaf forest)
-    8: 0,       #8: EBF (evergreen broad-leaf forest)
-    9: 0,       #9: ENF (evergreen needle-leaf forest)
-    10: 3,      #10: Bare
-}
-
-# Map label in JAXA 16.09 dataset to super class for evaluation
-JAXA16_map = copy(JAXA18_map)
 
 def get_normalized_map(labels):
     classes = sorted(list(labels.keys()))

@@ -8,9 +8,9 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.colors import BoundaryNorm, ListedColormap
-import ffmpeg
 import torch
-from constant import LANDSAT_RGB, ESA2021_LABEL
+from .constant import LANDSAT_RGB, ESA2021_LABEL
+import ffmpeg
 
 sns.set_theme()
 

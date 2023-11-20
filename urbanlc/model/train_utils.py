@@ -7,7 +7,6 @@ from typing import List, Optional, Tuple
 import torch
 import torch.nn as nn
 
-
 def set_seed(seed):
     # for some reasons, setting torch.backends.cudnn.deterministic = True will return an error
     # Can't pickle CudnnModule objects

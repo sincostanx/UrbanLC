@@ -33,11 +33,3 @@ def get_logger(name, level):
     return logger
 
 logger = get_logger(__name__, "INFO")
-
-if __name__ == "__main__":
-    logger = get_logger(__name__, "DEBUG")
-    logger.debug("debug message")
-    logger.info("info message")
-    logger.warning("warning message")
-    logger.error("error message")
-    logger.critical("critical message")

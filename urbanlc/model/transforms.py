@@ -11,13 +11,17 @@ import torch
 import torch.nn as nn
 import torchvision.transforms.functional as F
 from torchvision import transforms
-from torchgeo.transforms import indices
-from train_utils import set_seed
+from .train_utils import set_seed
+import warnings
+
+try:
+    from torchgeo.transforms import indices
+except Exception:
+    warnings.warn("torchgeo is not installed, data augmentation is disabled.")
 
 ##############################
 # XGBoost
 ##############################
-
 
 # TODO: implement these to work for torch and numpy
 # def compute_NDVI(img, index_nir=4, index_red=3):
@@ -28,7 +32,6 @@ def compute_NDVI(img: np.ndarray, index_nir: int, index_red: int) -> np.ndarray:
     out = (nir - red) / (nir + red)
     out[np.isnan(out)] = -1.0
     return np.expand_dims(out, axis=0)
-
 
 def compute_NDBI(img: np.ndarray, index_swir: int, index_nir: int) -> np.ndarray:
     nir = img[index_nir, :, :]
@@ -51,15 +54,6 @@ def compute_NDWI(img: np.ndarray, index_green: int, index_nir: int) -> np.ndarra
     green = img[index_green, :, :]
 
     out = (green - nir) / (green + nir)
-    out[np.isnan(out)] = -1.0
-    return np.expand_dims(out, axis=0)
-
-def compute_NMDI(img: np.ndarray, index_nir: int, index_swir1: int, index_swir2: int) -> np.ndarray:
-    nir = img[index_nir, :, :]
-    swir1 = img[index_swir1, :, :]
-    swir2 = img[index_swir2, :, :]
-
-    out = (nir - (swir1 - swir2)) / (nir + (swir1 - swir2))
     out[np.isnan(out)] = -1.0
     return np.expand_dims(out, axis=0)
 
@@ -211,7 +205,7 @@ class LandsatTransformer:
         if self.ndvi_indices is not None:
             ops.append(indices.AppendNDVI(**self.ndvi_indices))
         if (self.bui_indices is not None) and len(ops) == 2:
-            print("OK")
+            # print("OK")
             ops.append(AppendBUI(**self.bui_indices))
 
         ops.append(transforms.Normalize(mean=self.means, std=self.stds))

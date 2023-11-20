@@ -19,7 +19,10 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
 ]
-autodoc_mock_imports = ['utils']
+autodoc_mock_imports = [
+    'utils', 
+    'downloader',
+]
 
 templates_path = ['_templates']
 exclude_patterns = []
