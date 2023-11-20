@@ -31,7 +31,7 @@ class ESAWorldCover(BaseDownloader):
 
     @classmethod
     @validate_arguments
-    def initialize(cls, year: Annotated[int, Field(ge=2020, le=2021)], *args, **kwargs) -> "ESAWorldCover":
+    def initialize(cls, year: Annotated[int, Field(ge=2020, le=2021)], *args, **kwargs):
         """
         Initializes an ESAWorldCover instance based on the specified year.
 
