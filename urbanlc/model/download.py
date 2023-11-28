@@ -15,9 +15,18 @@ PRETRAINED_MODELS = {
     "OLITIRS": "OLITIRS_resnet50.pt",
 }
 
-def download_model(sensor_type):
+def download_model(sensor_type: str) -> torch.nn.Module:
     """
-    Downloads a pre-trained ResNet-50 model from Google Drive.
+    Downloads a pre-trained model from Google Drive.
+
+    This function downloads a pre-trained model from Google Drive based on the specified sensor type.
+    The model is stored locally in the 'pretrained_models' directory.
+
+    :param sensor_type: Type of sensor for selecting the appropriate pre-trained model.
+    :type sensor_type: str
+
+    :return: Pre-trained model.
+    :rtype: torch.nn.Module
     """
     assert sensor_type in PRETRAINED_MODELS.keys()
 

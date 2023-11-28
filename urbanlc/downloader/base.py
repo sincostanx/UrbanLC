@@ -60,7 +60,7 @@ class BoundingBox:
         :rtype: BoundingBox
         """
 
-        # Coord format: E, S, W, N
+        # Coord format: lon_min, lat_min, lon_max, lat_max
         bounds = [lon_min, lat_min, lon_max, lat_max]
         region = ee.Geometry.BBox(*bounds)
         return BoundingBox(bounds, region)

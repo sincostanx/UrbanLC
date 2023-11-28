@@ -2,11 +2,12 @@ import rasterio
 import numpy as np
 from natsort import natsorted
 from tqdm.auto import tqdm
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Union, Dict, Any, Tuple
 
 import warnings
 import torch
 import torch.optim as optim
+from torch.utils.data import DataLoader
 import segmentation_models_pytorch as smp
 import segmentation_models_pytorch.losses as losses
 from torchmetrics import F1Score, Accuracy, JaccardIndex
@@ -19,7 +20,7 @@ from .train_utils import (
     segment_satelite_image,
     combine_prediction
 )
-from .transforms import MSSTransformer, TMTransformer, OLITIRSTransformer
+from .pipeline_transforms import MSSTransformer, TMTransformer, OLITIRSTransformer
 from .dataloader import get_dataloader, parse_paths
 
 try:
@@ -28,15 +29,33 @@ except Exception:
     warnings.warn("wandb is not installed, deep-learning model training is disabled.")
 
 class DeepLearningLCC(LCC):
+    """
+        Deep-learning-based Land Cover Classification (LCC) model.
+    """
+
     def __init__(
         self,
         architecture: str,
         model_params: Dict[str, Any],
         device: Optional[str] = None,
         seed: Optional[int] = 0,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
+        """
+        Initializes the Deep Learning LCC model.
+
+        :param architecture: Name of the deep learning model architecture.
+        :type architecture: str
+        :param model_params: Dictionary containing model-specific parameters.
+        :type model_params: Dict[str, Any]
+        :param device: Device to use for training (e.g., "cuda" or "cpu").
+        :type device: Optional[str]
+        :param seed: Seed for reproducibility.
+        :type seed: Optional[int]
+        :param args: Additional positional arguments.
+        :param kwargs: Additional keyword arguments.
+        """
         set_seed(seed)
         super().__init__(*args, **kwargs)
         self.set_device(device)
@@ -44,6 +63,12 @@ class DeepLearningLCC(LCC):
         self.cache = {}
 
     def set_device(self, device: Union[None, str]) -> None:
+        """
+        Set the device for training or inference. Defaults to "cuda" if available.
+
+        :param device: Device to use for training (e.g., "cuda" or "cpu").
+        :type device: Union[None, str]
+        """
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -51,15 +76,36 @@ class DeepLearningLCC(LCC):
         # print(f"Using {self.device}")
 
     def build_model(self, architecture: str, model_params: Dict[str, Any]) -> None:
+        """
+        Build the deep learning model and moves it to the selected device.
+
+        :param architecture: Name of the deep learning model architecture.
+        :type architecture: str
+        :param model_params: Dictionary containing model-specific parameters.
+        :type model_params: Dict[str, Any]
+        """
         self.model = getattr(smp, architecture)(**model_params)
         self.model = self.model.to(self.device)
         self.elapsed_epoch = 0
 
     def to(self, device):
+        """
+        Move the model to a different device.
+
+        :param device: Device to move the model to.
+        :type device: Any
+        """
+
         self.set_device(device)
         self.model = self.model.to(self.device)
 
     def load_model(self, checkpoint_path: str) -> None:
+        """
+        Load a pre-trained model checkpoint.
+
+        :param checkpoint_path: Path to the pre-trained model.
+        :type checkpoint_path: str
+        """
         params = {
             "checkpoint_path": checkpoint_path,
             "model": self.model,
@@ -75,6 +121,14 @@ class DeepLearningLCC(LCC):
         ) = load_checkpoint(**params)
 
     def save_model(self, filename: str, current_epoch: int) -> None:
+        """
+        Save the current model checkpoint.
+
+        :param filename: Name of the checkpoint file.
+        :type filename: str
+        :param current_epoch: Current training epoch.
+        :type current_epoch: int
+        """
         params = {
             "save_dir": self.save_path,
             "name": filename,
@@ -90,8 +144,18 @@ class DeepLearningLCC(LCC):
         loss_fn_params: Dict[str, Any],
         optimizer_params: Dict[str, Any],
         scheduler_params: Dict[str, Any],
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
+        """
+        Set up the trainer with loss functions, optimizer, and scheduler.
+
+        :param loss_fn_params: Dictionary containing loss function parameters.
+        :type loss_fn_params: Dict[str, Any]
+        :param optimizer_params: Dictionary containing optimizer parameters.
+        :type optimizer_params: Dict[str, Any]
+        :param scheduler_params: Dictionary containing scheduler parameters.
+        :type scheduler_params: Dict[str, Any]
+        """
         self.loss_funcs = []
         for name, params in loss_fn_params.items():
             if name == "weights":
@@ -106,18 +170,42 @@ class DeepLearningLCC(LCC):
         self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, **scheduler_params)
 
     def normalize_class(self, gt: torch.Tensor) -> torch.Tensor:
+        """
+        Normalize ground-truth labels.
+
+        :param gt: Ground-truth tensor.
+        :type gt: torch.Tensor
+        :return: Normalized ground-truth tensor.
+        :rtype: torch.Tensor
+        """
         for i, val in enumerate(self.legends):
             gt[gt == val] = i
 
         return gt
 
     def denormalize_class(self, gt: torch.Tensor) -> torch.Tensor:
+        """
+        Denormalize ground-truth labels.
+
+        :param gt: Normalized ground-truth tensor.
+        :type gt: torch.Tensor
+        :return: Denormalized ground-truth tensor.
+        :rtype: torch.Tensor
+        """
         for i, val in enumerate(self.legends[::-1]):
             gt[gt == len(self.legends) - i - 1] = val
 
         return gt
 
-    def get_metrics(self, mode):
+    def get_metrics(self, mode: str) -> Dict[str, Any]:
+        """
+        Get metrics for the specified mode (Train or Val).
+
+        :param mode: Training mode ("Train") or validation mode ("Val").
+        :type mode: str
+        :return: Dictionary of metrics.
+        :rtype: Dict[str, Any]
+        """
         assert mode in ["Train", "Val"]
 
         kwargs = {"task": "multiclass", "num_classes": len(self.legends)}
@@ -130,7 +218,33 @@ class DeepLearningLCC(LCC):
         }
         return metrics
 
-    def train_one_epoch(self, step, train_loader, epoch, MAX_EPOCH, metrics, GRADIENT_ACCUMULATION_FACTOR):
+    def train_one_epoch(
+        self,
+        step: int,
+        train_loader: DataLoader,
+        epoch: int,
+        MAX_EPOCH: int,
+        metrics: Dict[str, Any],
+        GRADIENT_ACCUMULATION_FACTOR: Optional[int],
+    ) -> Tuple[int, Dict[str, Any], float, int]:
+        """
+        Train the model for one epoch.
+
+        :param step: Current training step.
+        :type step: int
+        :param train_loader: DataLoader for training.
+        :type train_loader: DataLoader
+        :param epoch: Current training epoch.
+        :type epoch: int
+        :param MAX_EPOCH: Maximum number of training epochs.
+        :type MAX_EPOCH: int
+        :param metrics: Dictionary of metrics.
+        :type metrics: Dict[str, Any]
+        :param GRADIENT_ACCUMULATION_FACTOR: Gradient accumulation factor.
+        :type GRADIENT_ACCUMULATION_FACTOR: Optional[int]
+        :return: Updated step, metrics, training loss, and sample count.
+        :rtype: Tuple[int, Dict[str, Any], float, int]
+        """
         # train for one epoch
         sample_count = 0
         train_loss = 0
@@ -147,27 +261,27 @@ class DeepLearningLCC(LCC):
             img = batch["image"][:, :-1, :, :].float().to(self.device)
             gt = self.normalize_class(batch["mask"]).to(self.device)
 
-            # data augmentation and esa label normnalization
+            # data augmentation and esa label normalization
             params = {
                 "img": img,
                 "mask": gt,
                 "is_training": True,
                 "p_hflip": 0.5,
                 "p_vflip": 0.5,
-                "p_mix_patch": 1.0 if epoch < 0.8 * MAX_EPOCH else 0.0
+                "p_mix_patch": 1.0 if epoch < 0.8 * MAX_EPOCH else 0.0,
             }
             img, gt = self.transform_pipeline(**params)
             gt = gt.squeeze()
 
             # prediction, loss calculation, and average performance tracking
             preds = self.model(img)
-            
+
             loss = None
             for weight, loss_fn in zip(self.loss_weights, self.loss_funcs):
                 if loss is None:
-                    loss = weight*loss_fn(preds, gt)
+                    loss = weight * loss_fn(preds, gt)
                 else:
-                    loss = loss + weight*loss_fn(preds, gt)
+                    loss = loss + weight * loss_fn(preds, gt)
 
             wandb.log({f"Train/loss": loss.item()}, step=step)
 
@@ -188,9 +302,9 @@ class DeepLearningLCC(LCC):
                 loss.backward()
                 if ((idx + 1) % GRADIENT_ACCUMULATION_FACTOR == 0) or (idx + 1 == len(train_loader)):
                     self.optimizer.step()
-            
+
             step += 1
-        
+
         return step, metrics, train_loss, sample_count
 
     def train(
@@ -200,6 +314,18 @@ class DeepLearningLCC(LCC):
         validate_params: Dict[str, Any],
         logger_params: Dict[str, Any],
     ) -> None:
+        """
+        Train the deep learning model.
+
+        :param dataloader_params: Parameters for data loading.
+        :type dataloader_params: Dict[str, Any]
+        :param trainer_params: Parameters for the trainer.
+        :type trainer_params: Dict[str, Any]
+        :param validate_params: Parameters for validation.
+        :type validate_params: Dict[str, Any]
+        :param logger_params: Parameters for the logger.
+        :type logger_params: Dict[str, Any]
+        """
         # initialize logger
         config_list = [dataloader_params, trainer_params, validate_params]
         config = {k: v for d in config_list for k, v in d.items()}
@@ -266,8 +392,26 @@ class DeepLearningLCC(LCC):
 
         wandb.finish()
 
-    def validate(self, root: str =None, img_glob: str=None, gt_glob: str=None,\
-        img_paths: Optional[List[str]] = None, gt_paths: Optional[List[str]] = None, cache: bool=True) -> Dict[str, Any]:
+    def validate(self, root: str = None, img_glob: str = None, gt_glob: str = None,
+        img_paths: Optional[List[str]] = None, gt_paths: Optional[List[str]] = None, cache: bool = True) -> Dict[str, Any]:
+        """
+        Validate the deep learning model.
+
+        :param root: Root directory for data.
+        :type root: str, optional
+        :param img_glob: Image file pattern.
+        :type img_glob: str, optional
+        :param gt_glob: Ground truth file pattern.
+        :type gt_glob: str, optional
+        :param img_paths: List of image paths.
+        :type img_paths: List[str], optional
+        :param gt_paths: List of ground truth paths.
+        :type gt_paths: List[str], optional
+        :param cache: Whether to use caching.
+        :type cache: bool, optional
+        :return: Dictionary of validation results.
+        :rtype: Dict[str, Any]
+        """
         # get all paths
         img_paths = parse_paths(root, img_glob) if img_paths is None else natsorted(img_paths)
         gt_paths = parse_paths(root, gt_glob) if gt_paths is None else natsorted(gt_paths)
@@ -276,7 +420,7 @@ class DeepLearningLCC(LCC):
         # validation scores
         val_metrics = self.get_metrics(mode="Val")
 
-        # valiadate
+        # validate
         self.model.eval()
         val_loss = 0
         for img_path, gt_path in tqdm(zip(img_paths, gt_paths), total=len(img_paths)):
@@ -307,6 +451,22 @@ class DeepLearningLCC(LCC):
     def infer(
         self, img_path: str, convert_numpy: Optional[bool] = True, cache=False, return_prob=False, stride=None
     ) -> Union[np.ndarray, torch.Tensor]:
+        """
+        Perform inference using the deep learning model.
+
+        :param img_path: Path to the input image.
+        :type img_path: str
+        :param convert_numpy: Whether to convert the result to NumPy array.
+        :type convert_numpy: bool, optional
+        :param cache: Whether to use caching.
+        :type cache: bool, optional
+        :param return_prob: Whether to return probability map.
+        :type return_prob: bool, optional
+        :param stride: Stride for inference.
+        :type stride: int, optional
+        :return: Inference result.
+        :rtype: Union[np.ndarray, torch.Tensor]
+        """
         if cache:
             img = self.cache[img_path] if img_path in self.cache else rasterio.open(img_path).read()
             self.cache[img_path] = img
@@ -315,7 +475,7 @@ class DeepLearningLCC(LCC):
 
         input_img = torch.from_numpy(img)
         input_patches, bounding_boxes = segment_satelite_image(input_img, stride=stride)
-        input_patches = torch.concat(input_patches, axis=0)
+        input_patches = torch.cat(input_patches, axis=0)
         input_patches = input_patches[:, :-1, :, :]
 
         input_patches, _ = self.transform_pipeline(
@@ -343,18 +503,51 @@ class DeepLearningLCC(LCC):
 
 
 class MSSDeepLearning(DeepLearningLCC):
+    """
+    Deep-learning-based LCC for Landsat 1 - 5 (using MSS sensor).
+    """
     def __init__(self, *args, **kwargs):
+        """
+        Initialize deep-learning-based LCC for Landsat 1 - 5 (using MSS sensor).
+
+        :param args: Additional positional arguments.
+        :type args: Tuple
+        :param kwargs: Additional keyword arguments.
+        :type kwargs: Dict
+        """
         self.transform_pipeline = MSSTransformer()
         super().__init__(*args, **kwargs)
 
 
 class TMDeepLearning(DeepLearningLCC):
+    """
+    Deep-learning-based LCC for Landsat 4 - 7 (using TM sensor).
+    """
     def __init__(self, *args, **kwargs):
+        """
+        Initialize deep-learning-based LCC for Landsat 4 - 7 (using TM sensor).
+
+        :param args: Additional positional arguments.
+        :type args: Tuple
+        :param kwargs: Additional keyword arguments.
+        :type kwargs: Dict
+        """
         self.transform_pipeline = TMTransformer()
         super().__init__(*args, **kwargs)
 
 
 class OLITIRSDeepLearning(DeepLearningLCC):
+    """
+    Deep-learning-based LCC for Landsat 8 - 9 (using OLI/TIRS sensor).
+    """
     def __init__(self, *args, **kwargs):
+        """
+        Initialize deep-learning-based LCC for Landsat 8 - 9 (using OLI/TIRS sensor).
+
+        :param args: Additional positional arguments.
+        :type args: Tuple
+        :param kwargs: Additional keyword arguments.
+        :type kwargs: Dict
+        """
         self.transform_pipeline = OLITIRSTransformer()
         super().__init__(*args, **kwargs)

@@ -19,18 +19,37 @@ import xgboost
 from xgboost import XGBClassifier
 from typing import List, Optional, Tuple, Dict, Any, Union
 
-from .transforms import compute_NDBI, compute_NDVI, compute_BUI
+from .pipeline_transforms import compute_NDBI, compute_NDVI, compute_BUI
 
 from .base import LCC
 
 
 class BaselineLCC(LCC):
-    def __init__(self, model_name, model_params, *args, **kwargs) -> None:
+    """
+    BaselineLCC abstract class for LCC with classical ML
+    """
+    def __init__(self, model_name: str, model_params: dict, *args, **kwargs) -> None:
+        """
+        Initialize the BaselineLCC model.
+
+        :param model_name: Name of the model ("xgb", "svm", or "logistic_regression").
+        :type model_name: str
+        :param model_params: Parameters for initializing the specific model.
+        :type model_params: dict
+        :param args: Additional arguments passed to the superclass.
+        :param kwargs: Additional keyword arguments passed to the superclass.
+        """
         super().__init__(*args, **kwargs)
         self.model_name = model_name
         self.build_model(model_params)
 
-    def build_model(self, model_params):
+    def build_model(self, model_params: dict) -> None:
+        """
+        Build the specific model based on the provided model name and parameters.
+
+        :param model_params: Parameters for initializing the specific model.
+        :type model_params: dict
+        """
         if self.model_name == "xgb":
             self.model = XGBClassifier(**model_params)
         elif self.model_name == "svm":
@@ -39,6 +58,13 @@ class BaselineLCC(LCC):
             self.model = make_pipeline(StandardScaler(), LogisticRegression(**model_params))
 
     def load_model(self, checkpoint_path: str) -> None:
+        """
+        Load a pre-trained model from a checkpoint file.
+
+        :param checkpoint_path: Path to the checkpoint file.
+        :type checkpoint_path: str
+        :rtype: None
+        """
         try:
             with open(checkpoint_path, "rb") as f:
                 temp, temp2 = pickle.load(f)
@@ -55,7 +81,14 @@ class BaselineLCC(LCC):
         except Exception as e:
             raise (e)
 
-    def save_model(self, data: Tuple[Any, List[int]]):
+    def save_model(self, data: Tuple[Any, List[int]]) -> None:
+        """
+        Save the current model and related information to a checkpoint file.
+
+        :param data: Tuple containing the model-related information to be saved.
+        :type data: Tuple[Any, List[int]]
+        :rtype: None
+        """
         try:
             os.makedirs(Path(self.save_path).parent, exist_ok=True)
             with open(self.save_path, "wb") as f:
@@ -67,18 +100,34 @@ class BaselineLCC(LCC):
 
     # TODO: can we optimize this?
     def update_transform_map(self, y_train: np.ndarray) -> None:
+        """
+        Update the transform map based on the provided training labels.
+
+        :param y_train: Training labels.
+        :type y_train: np.ndarray
+        :rtype: None
+        """
         seen_labels = np.unique(y_train)
         unseen_labels = np.array([id for id in self.legends if id not in seen_labels])
         self.legends = np.concatenate([seen_labels, unseen_labels])
         self.construct_transform_map()
 
     def transform_pipeline(self, img: np.ndarray) -> np.ndarray:
+        """
+        Transform the input image using specified transformations.
+
+        :param img: Input image.
+        :type img: np.ndarray
+
+        :return: Transformed image.
+        :rtype: np.ndarray
+        """
         all_bands = [img]
         if self.ndbi_indices is not None:
             all_bands.append(compute_NDBI(img, **self.ndbi_indices))
         if self.ndvi_indices is not None:
             all_bands.append(compute_NDVI(img, **self.ndvi_indices))
-        if (self.bui_indices is not None):
+        if self.bui_indices is not None:
             all_bands.append(compute_BUI(img, **self.bui_indices))
 
         img = np.concatenate(all_bands, axis=0)
@@ -91,7 +140,19 @@ class BaselineLCC(LCC):
         gt_paths: List[Any] = [],
         return_size: Optional[bool] = False,
     ) -> Union[Tuple[np.ndarray, np.ndarray, List[Tuple[int]]], Tuple[np.ndarray, np.ndarray]]:
-        # logger.info("Retrieving images...")
+        """
+        Retrieve and preprocess Landsat images and ground truth land cover data from specified paths for training/inference.
+
+        :param img_paths: List of paths to Landsat image files.
+        :type img_paths: List[str]
+        :param gt_paths: List of paths to ground truth land cover files.
+        :type gt_paths: List[Any]
+        :param return_size: Whether to return the original sizes of Landsat images.
+        :type return_size: Optional[bool]
+
+        :return: Tuple containing retrieved images and ground truth land cover data.
+        :rtype: Union[Tuple[np.ndarray, np.ndarray, List[Tuple[int]]], Tuple[np.ndarray, np.ndarray]]
+        """
         print("Retrieving images...")
         img_paths = [img_paths] if isinstance(img_paths, str) else img_paths
         gt_paths = [gt_paths] if isinstance(gt_paths, str) else gt_paths
@@ -129,6 +190,21 @@ class BaselineLCC(LCC):
         cross_validate_params: Optional[Dict[str, Any]] = None,
         train_size: Optional[float] = 1.0,
     ) -> None:
+        """
+        Train the model using specified Landsat image and ground truth land cover paths, with optional cross-validation.
+
+        :param img_paths: List of paths to Landsat image files.
+        :type img_paths: List[str]
+        :param gt_paths: List of paths to ground truth land cover files.
+        :type gt_paths: List[str]
+        :param enable_cv: Whether to perform cross-validation.
+        :type enable_cv: Optional[bool]
+        :param cross_validate_params: Parameters for cross-validation.
+        :type cross_validate_params: Optional[Dict[str, Any]]
+        :param train_size: Ratio of observation points (pixels) to be used as the training data.
+        :type train_size: Optional[float]
+        :rtype: None
+        """
         images, gts = self.retrieve_images(img_paths, gt_paths)
 
         images = np.concatenate(images, axis=1)
@@ -139,7 +215,7 @@ class BaselineLCC(LCC):
 
         if train_size > 1.0:
             train_ratio = float(train_size) / len(X_train)
-            print(train_ratio)
+            # print(train_ratio)
             X_train, _, y_train, _ = train_test_split(
                 X_train,
                 y_train,
@@ -180,6 +256,17 @@ class BaselineLCC(LCC):
     def validate(
         self, img_paths: List[str], gt_paths: List[str]
     ) -> List[Dict[str, Any]]:
+        """
+        Validate the model using specified Landsat image and ground truth land cover paths.
+
+        :param img_paths: List of paths to Landsat image files.
+        :type img_paths: List[str]
+        :param gt_paths: List of paths to ground truth land cover files.
+        :type gt_paths: List[str]
+
+        :return: List of dictionaries containing classification report results.
+        :rtype: List[Dict[str, Any]]
+        """
         images, gts = self.retrieve_images(img_paths, gt_paths)
 
         results = []
@@ -201,6 +288,15 @@ class BaselineLCC(LCC):
         return results
 
     def infer(self, img_paths: List[str]) -> List[np.ndarray]:
+        """
+        Perform inference on specified Landsat image paths and returns the inferred land cover maps.
+
+        :param img_paths: List of paths to Landsat image files.
+        :type img_paths: List[str]
+
+        :return: List of inferred land cover maps.
+        :rtype: List[np.ndarray]
+        """
         images, _, original_size = self.retrieve_images(img_paths, return_size=True)
         preds = []
         for img, size in tqdm(zip(images, original_size), total=len(original_size)):
@@ -213,8 +309,19 @@ class BaselineLCC(LCC):
         return preds
 
 
+
 class MSSBaseline(BaselineLCC):
+    """
+    MSSBaseline class for LCC with classical ML using data from Landsat 1 - 5 (MSS sensor)
+    """
+
     def __init__(self, *args, **kwargs):
+        """
+        Initialize MSSBaseline model, inheriting from the BaselineLCC model.
+
+        :param args: Additional arguments passed to the superclass.
+        :param kwargs: Additional keyword arguments passed to the superclass.
+        """
         super().__init__(*args, **kwargs)
         self.ndbi_indices = None  # SWIR is unavailable for MSS sensors
         self.ndvi_indices = {"index_nir": 3, "index_red": 1}
@@ -222,7 +329,17 @@ class MSSBaseline(BaselineLCC):
 
 
 class TMBaseline(BaselineLCC):
+    """
+    TMBaseline class for LCC with classical ML using data from Landsat 4 - 7 (TM sensor)
+    """
+
     def __init__(self, *args, **kwargs):
+        """
+        Initialize TMBaseline model, inheriting from the BaselineLCC model.
+
+        :param args: Additional arguments passed to the superclass.
+        :param kwargs: Additional keyword arguments passed to the superclass.
+        """
         super().__init__(*args, **kwargs)
         self.ndbi_indices = {"index_swir": 4, "index_nir": 3}
         self.ndvi_indices = {"index_nir": 3, "index_red": 2}
@@ -230,7 +347,17 @@ class TMBaseline(BaselineLCC):
 
 
 class OLI_TIRSBaseline(BaselineLCC):
+    """
+    OLI_TIRSBaseline class for LCC with classical ML using data from Landsat 8 - 9 (OLI/TIRS sensor)
+    """
+
     def __init__(self, *args, **kwargs):
+        """
+        Initialize OLI_TIRSBaseline model, inheriting from the BaselineLCC model.
+
+        :param args: Additional arguments passed to the superclass.
+        :param kwargs: Additional keyword arguments passed to the superclass.
+        """
         super().__init__(*args, **kwargs)
         self.ndbi_indices = {"index_swir": 5, "index_nir": 4}
         self.ndvi_indices = {"index_nir": 4, "index_red": 3}
