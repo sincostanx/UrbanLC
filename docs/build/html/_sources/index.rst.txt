@@ -26,13 +26,13 @@ A set of quickstart Jupyter notebooks can be found `here <https://github.com/sin
 
 .. toctree::
    :maxdepth: 1
-   :caption: **Getting Started**
+   :caption: Getting Started
 
    quickstart
 
 
 .. toctree::
-   :caption: **API documentation**
+   :caption: API documentation
 
    api
 
